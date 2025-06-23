@@ -10,7 +10,13 @@ import (
 	"time"
 )
 
-const TIME_FORMAT = "2006-01-02 15:04:05"
+const (
+	TIME_FORMAT      = "2006-01-02 15:04:05"
+	TIME_ZONE        = "CST"
+	TIME_ZONE_OFFSET = 8 * 60 * 60
+)
+
+var timeLoc = time.FixedZone(TIME_ZONE, TIME_ZONE_OFFSET)
 
 var (
 	keys = []string{
@@ -40,7 +46,7 @@ const (
 var loginUrl = "http://10.1.2.3/drcom/login?"
 
 var (
-	startTime      = time.Now()
+	startTime      = time.Now().In(timeLoc)
 	triesCount     = 0
 	successesCount = 0
 )
@@ -71,7 +77,7 @@ func init() {
 }
 
 func next630() (till time.Duration) {
-	now := time.Now()
+	now := time.Now().In(timeLoc)
 	next := time.Date(now.Year(), now.Month(), now.Day(), 6, 30, 0, 0, now.Location())
 	if now.After(next) {
 		next = next.Add(24 * time.Hour)
@@ -86,11 +92,11 @@ func doLogin() {
 	const TRIES = 30
 	const TRIES_INTERVAL = time.Second * 10
 
-	ts := time.Now()
+	ts := time.Now().In(timeLoc)
 
 	for tries := TRIES; tries > 0; tries-- {
 		triesCount++
-		fmt.Println(time.Now().Format(TIME_FORMAT))
+		fmt.Println(time.Now().In(timeLoc).Format(TIME_FORMAT))
 
 		resp, err := http.Get(loginUrl)
 		if err != nil {
