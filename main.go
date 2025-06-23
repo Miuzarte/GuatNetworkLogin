@@ -15,37 +15,19 @@ const TIME_FORMAT = "2006-01-02 15:04:05"
 var (
 	keys = []string{
 		"callback",
-		"DDDDD",
-		"upass",
-		"0MKKey",
-		"R1",
-		"R2",
-		"R3",
-		"R6",
-		"para",
-		"v6ip",
-		"terminal_type",
-		"lang",
-		"jsVersion",
-		"v",
-		"lang",
+		"DDDDD", // acc
+		"upass", // pw
+		"0MKKey", "R1", "R2",
+		"R3", // ISP
+		"R6", "para", "v6ip", "terminal_type", "lang", "jsVersion", "v", "lang",
 	}
 	values = []string{
 		"dr1003",
 		"", // [1] acc
 		"", // [2] pw
-		"123456",
-		"0",
-		"",
+		"123456", "0", "",
 		"", // [6] ISP: 0:校园网, 1:电信, 2:联通, 3:移动
-		"0",
-		"00",
-		"",
-		"1",
-		"zh-cn",
-		"4.2.1",
-		"5730",
-		"zh",
+		"0", "00", "", "1", "zh-cn", "4.2.1", "5730", "zh",
 	}
 )
 
