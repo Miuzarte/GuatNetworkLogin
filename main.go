@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"time"
+	"unsafe"
 )
 
 const (
@@ -43,7 +45,9 @@ const (
 	PARAM_ISP = 6
 )
 
-var loginUrl = "http://10.1.2.3/drcom/login?"
+const LOGIN_URL = "http://10.1.2.3/drcom/login"
+
+var loginUrl string
 
 var (
 	startTime      = time.Now().In(timeLoc)
@@ -53,7 +57,7 @@ var (
 
 func init() {
 	if len(keys) != len(values) {
-		panic("FIXME: keys and values length mismatch")
+		panic(fmt.Sprintln("FIXME: keys and values length mismatch", len(keys), len(values)))
 	}
 
 	if len(os.Args) < 4 || os.Args[1] == "" || os.Args[2] == "" || os.Args[3] == "" {
@@ -61,19 +65,35 @@ func init() {
 		fmt.Println("ISP: 0:校园网, 1:电信, 2:联通, 3:移动")
 		os.Exit(1)
 	}
-	values[PARAM_ACC] = os.Args[1] // acc
-	values[PARAM_PW] = os.Args[2]  // pw
-	values[PARAM_ISP] = os.Args[3] // TOOD: figure out which param is ISP
+	values[PARAM_ACC] = os.Args[1]
+	values[PARAM_PW] = os.Args[2]
+	values[PARAM_ISP] = os.Args[3]
 
+	// 预分配古法拼接
+	stringLen := len(LOGIN_URL) + len(keys)*2 // 1? 14& 15=
 	for i := range len(keys) {
-		if i > 0 {
-			loginUrl += "&"
-		}
-		loginUrl += keys[i] + "=" + values[i]
+		stringLen += len(keys[i]) + len(values[i])
 	}
 
+	str := make([]byte, 0, stringLen)
+	str = append(str, LOGIN_URL...)
+	for i := range len(keys) {
+		if i == 0 {
+			str = append(str, '?')
+		} else {
+			str = append(str, '&')
+		}
+		str = append(str, keys[i]...)
+		str = append(str, '=')
+		str = append(str, values[i]...)
+	}
+	loginUrl = unsafe.String(unsafe.SliceData(str), len(str))
 	fmt.Println("loginUrl:")
 	fmt.Println(loginUrl)
+
+	if stringLen != len(loginUrl) {
+		panic(fmt.Sprintln("FIXME: loginUrl length mismatch", stringLen, len(loginUrl)))
+	}
 }
 
 func next630() (till time.Duration) {
@@ -83,26 +103,38 @@ func next630() (till time.Duration) {
 		next = next.Add(24 * time.Hour)
 	}
 	till = next.Sub(now)
-	fmt.Printf("%s till next 6:30\n", till.Round(time.Second))
+	fmt.Println(till.Round(time.Second), "till next 6:30")
 	return till
 }
 
+var HttpClient = &http.Client{
+	Timeout: time.Second * 5, // 内网环境 使用较短的 timeout
+}
+
 func doLogin() {
-	// 5min
-	const TRIES = 30
-	const TRIES_INTERVAL = time.Second * 10
+	defer runtime.GC() // 执行完毕后清理循环中创建的 [*http.Request]
 
-	ts := time.Now().In(timeLoc)
+	triesBefore := triesCount
 
-	for tries := TRIES; tries > 0; tries-- {
+	// 在 5min 内无限尝试, 通过 request timeout 控制重试间隔
+	const DURATION = time.Minute * 5
+	t := time.Now().In(timeLoc)
+	timeEnd := t.Add(DURATION)
+
+	for t.Before(timeEnd) {
+		t = time.Now().In(timeLoc)
+		time.Sleep(time.Second / 10) // 保险给一个固定间隔
 		triesCount++
-		fmt.Println(time.Now().In(timeLoc).Format(TIME_FORMAT))
+		fmt.Println(t.Format(TIME_FORMAT))
 
-		resp, err := http.Get(loginUrl)
+		req, err := http.NewRequest("GET", loginUrl, nil)
+		if err != nil {
+			panic("failed to create request: " + err.Error())
+		}
+
+		resp, err := HttpClient.Do(req)
 		if err != nil {
 			fmt.Println("failed to get:", err)
-			fmt.Println("retrying in", TRIES_INTERVAL)
-			time.Sleep(TRIES_INTERVAL)
 			continue
 		}
 
@@ -110,17 +142,17 @@ func doLogin() {
 		resp.Body.Close()
 		if err != nil {
 			fmt.Println("failed to read body:", err)
-			fmt.Println("retrying in", TRIES_INTERVAL)
-			time.Sleep(TRIES_INTERVAL)
 			continue
 		}
 
-		fmt.Println(string(body))
+		fmt.Println(unsafe.String(unsafe.SliceData(body), len(body)))
 		successesCount++
 		return
 	}
 
-	fmt.Printf("failed to login after %d tries since %s\n", TRIES, ts.Format(TIME_FORMAT))
+	fmt.Println("failed to login after", triesCount-triesBefore,
+		"tries since", t.Format(TIME_FORMAT),
+		", last try at", time.Now().In(timeLoc).Format(TIME_FORMAT))
 }
 
 func main() {
@@ -162,8 +194,10 @@ LOOP:
 			timer.Reset(next630())
 		case <-sigChan:
 			if triesCount != 0 {
-				fmt.Printf("total tries: %d, successes: %d since %s(%s)\n",
-					triesCount, successesCount, startTime.Format(TIME_FORMAT), time.Since(startTime).Round(time.Second))
+				fmt.Println("total tries:", triesCount,
+					"successes:", successesCount,
+					"since", startTime.Format(TIME_FORMAT),
+					"(", time.Since(startTime).Round(time.Second), ")")
 			}
 			break LOOP
 		}
