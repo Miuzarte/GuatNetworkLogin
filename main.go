@@ -55,6 +55,11 @@ var (
 	successesCount = 0
 )
 
+const (
+	DEFAULT_LOGIN_HOUR = 6
+	DEFAULT_LOGIN_MIN  = 30
+)
+
 func init() {
 	if len(keys) != len(values) {
 		panic(fmt.Sprintln("FIXME: keys and values length mismatch", len(keys), len(values)))
@@ -96,14 +101,14 @@ func init() {
 	}
 }
 
-func next630() (till time.Duration) {
+func next(hour int, min int) (till time.Duration) {
 	now := time.Now().In(timeLoc)
-	next := time.Date(now.Year(), now.Month(), now.Day(), 6, 30, 0, 0, now.Location())
+	next := time.Date(now.Year(), now.Month(), now.Day(), hour, min, 0, 0, now.Location())
 	if now.After(next) {
 		next = next.Add(24 * time.Hour)
 	}
 	till = next.Sub(now)
-	fmt.Println(till.Round(time.Second), "till next 6:30")
+	fmt.Print(till.Round(time.Second), " till next ", hour, ":", min, "\n")
 	return till
 }
 
@@ -178,20 +183,18 @@ func main() {
 		}
 	}()
 
-	timer := time.NewTimer(next630())
+	timer := time.NewTimer(next(DEFAULT_LOGIN_HOUR, DEFAULT_LOGIN_MIN))
 	defer timer.Stop()
 LOOP:
 	for {
 		select {
 		case <-timer.C:
 			doLogin()
-			timer.Reset(next630())
+			tn := time.Now().In(timeLoc)
+			timer.Reset(next(tn.Hour(), tn.Minute()))
+			// 如果在6:31登录成功, 则下一次会定时在6:31
 		case <-stdinCh:
 			doLogin()
-			if !timer.Stop() {
-				<-timer.C
-			}
-			timer.Reset(next630())
 		case <-sigChan:
 			if triesCount != 0 {
 				fmt.Println("total tries:", triesCount,
