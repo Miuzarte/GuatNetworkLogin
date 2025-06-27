@@ -50,14 +50,20 @@ const LOGIN_URL = "http://10.1.2.3/drcom/login"
 var loginUrl string
 
 var (
-	startTime      = time.Now().In(timeLoc)
-	triesCount     = 0
-	successesCount = 0
+	startTime           = time.Now().In(timeLoc)
+	totalTriesCount     = 0
+	totalSuccessesCount = 0
 )
 
 const (
 	DEFAULT_LOGIN_HOUR = 6
 	DEFAULT_LOGIN_MIN  = 30
+)
+
+var (
+	loginHour = DEFAULT_LOGIN_HOUR
+	loginMin  = DEFAULT_LOGIN_MIN
+	loginSec  = 0
 )
 
 func init() {
@@ -101,9 +107,9 @@ func init() {
 	}
 }
 
-func next(hour int, min int) (till time.Duration) {
+func next(hour, min, sec int) (till time.Duration) {
 	now := time.Now().In(timeLoc)
-	next := time.Date(now.Year(), now.Month(), now.Day(), hour, min, 0, 0, now.Location())
+	next := time.Date(now.Year(), now.Month(), now.Day(), hour, min, sec, 0, now.Location())
 	if now.After(next) {
 		next = next.Add(24 * time.Hour)
 	}
@@ -116,10 +122,10 @@ var HttpClient = &http.Client{
 	Timeout: time.Second * 5, // 内网环境 使用较短的 timeout
 }
 
-func doLogin() {
+func doLogin() int {
 	defer runtime.GC() // 执行完毕后清理循环中创建的 [*http.Request]
 
-	triesBefore := triesCount
+	triesBefore := totalTriesCount
 
 	// 在 5min 内无限尝试, 通过 request timeout 控制重试间隔
 	const DURATION = time.Minute * 5
@@ -129,7 +135,7 @@ func doLogin() {
 	for t.Before(timeEnd) {
 		t = time.Now().In(timeLoc)
 		time.Sleep(time.Second / 10) // 保险给一个固定间隔
-		triesCount++
+		totalTriesCount++
 		fmt.Println(t.Format(TIME_FORMAT))
 
 		req, err := http.NewRequest("GET", loginUrl, nil)
@@ -151,13 +157,14 @@ func doLogin() {
 		}
 
 		fmt.Println(unsafe.String(unsafe.SliceData(body), len(body)))
-		successesCount++
-		return
+		totalSuccessesCount++
+		return totalTriesCount - triesBefore
 	}
 
-	fmt.Println("failed to login after", triesCount-triesBefore,
+	fmt.Println("failed to login after", totalTriesCount-triesBefore,
 		"tries since", t.Format(TIME_FORMAT),
 		", last try at", time.Now().In(timeLoc).Format(TIME_FORMAT))
+	return totalTriesCount - triesBefore
 }
 
 func main() {
@@ -183,22 +190,24 @@ func main() {
 		}
 	}()
 
-	timer := time.NewTimer(next(DEFAULT_LOGIN_HOUR, DEFAULT_LOGIN_MIN))
+	timer := time.NewTimer(next(DEFAULT_LOGIN_HOUR, DEFAULT_LOGIN_MIN, 0))
 	defer timer.Stop()
 LOOP:
 	for {
 		select {
 		case <-timer.C:
-			doLogin()
+			tries := doLogin()
 			tn := time.Now().In(timeLoc)
-			timer.Reset(next(tn.Hour(), tn.Minute()))
-			// 如果在6:31登录成功, 则下一次会定时在6:31
+			loginHour, loginMin = tn.Hour(), tn.Minute()
+			loginSec += (tries - 1) * 5
+			timer.Reset(next(loginHour, loginMin, loginSec))
+			// 如果在06:31:45登录成功, 则下一次会定时在06:31:45
 		case <-stdinCh:
 			doLogin()
 		case <-sigChan:
-			if triesCount != 0 {
-				fmt.Println("total tries:", triesCount,
-					"successes:", successesCount,
+			if totalTriesCount != 0 {
+				fmt.Println("total tries:", totalTriesCount,
+					"successes:", totalSuccessesCount,
 					"since", startTime.Format(TIME_FORMAT),
 					"(", time.Since(startTime).Round(time.Second), ")")
 			}
