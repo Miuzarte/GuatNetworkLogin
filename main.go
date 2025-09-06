@@ -34,8 +34,8 @@ var (
 		"", // [1] acc
 		"", // [2] pw
 		"123456", "0", "",
-		"", // [6] ISP: 0:校园网, 1:电信, 2:联通, 3:移动
-		"0", "00", "", "1", "zh-cn", "4.2.1", "5730", "zh",
+		"", // [6] ISP: 0:校园网, 1:电信, 2:联通, 3:移动, 4:广电
+		"0", "00", "", "1", "zh-cn", "4.2.1", "2250", "zh",
 	}
 )
 
@@ -73,7 +73,7 @@ func init() {
 
 	if len(os.Args) < 4 || os.Args[1] == "" || os.Args[2] == "" || os.Args[3] == "" {
 		fmt.Println("Usage: GuatNetworkLogin <account> <password> <ISP>")
-		fmt.Println("ISP: 0:校园网, 1:电信, 2:联通, 3:移动")
+		fmt.Println("ISP: 0:校园网, 1:电信, 2:联通, 3:移动, 4:广电")
 		os.Exit(1)
 	}
 	values[PARAM_ACC] = os.Args[1]
