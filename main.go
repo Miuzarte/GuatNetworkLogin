@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	TIME_FORMAT      = "2006-01-02 15:04:05"
+	TIME_FORMAT      = "2006/01/02 15:04:05"
 	TIME_ZONE        = "CST"
 	TIME_ZONE_OFFSET = 8 * 60 * 60
 )
@@ -21,7 +21,7 @@ const (
 var timeLoc = time.FixedZone(TIME_ZONE, TIME_ZONE_OFFSET)
 
 var (
-	keys = []string{
+	keys = [...]string{
 		"callback",
 		"DDDDD", // acc
 		"upass", // pw
@@ -29,7 +29,7 @@ var (
 		"R3", // ISP
 		"R6", "para", "v6ip", "terminal_type", "lang", "jsVersion", "v", "lang",
 	}
-	values = []string{
+	values = [...]string{
 		"dr1003",
 		"", // [1] acc
 		"", // [2] pw
@@ -40,19 +40,49 @@ var (
 )
 
 const (
-	PARAM_ACC = 1
-	PARAM_PW  = 2
-	PARAM_ISP = 6
+	keysLen   = len(keys)
+	valuesLen = len(values)
 )
+
+func init() {
+	if keysLen != valuesLen {
+		panic(fmt.Sprintf("[FIXME] keysLen(%d) != valuesLen(%d)", keysLen, valuesLen))
+	}
+}
+
+const (
+	INDEX_PARAM_ACC = 1
+	INDEX_PARAM_PW  = 2
+	INDEX_PARAM_ISP = 6
+)
+
+func init() {
+	if len(os.Args) < 4 || os.Args[1] == "" || os.Args[2] == "" || os.Args[3] == "" {
+		println("Usage: GuatNetworkLogin <account> <password> <ISP>")
+		println("ISP: 0:校园网, 1:电信, 2:联通, 3:移动, 4:广电")
+		os.Exit(1)
+	}
+	values[INDEX_PARAM_ACC] = os.Args[1]
+	values[INDEX_PARAM_PW] = os.Args[2]
+	values[INDEX_PARAM_ISP] = os.Args[3]
+}
 
 const LOGIN_URL = "http://10.1.2.3/drcom/login"
 
-var loginUrl string
+var loginUrl []byte
+
+func toString(b []byte) string {
+	return unsafe.String(unsafe.SliceData(b), len(b))
+}
 
 var (
 	startTime           = time.Now().In(timeLoc)
 	totalTriesCount     = 0
 	totalSuccessesCount = 0
+)
+
+const (
+	TOTLA_TIMEOUT = time.Minute * 10
 )
 
 const (
@@ -67,43 +97,28 @@ var (
 )
 
 func init() {
-	if len(keys) != len(values) {
-		panic(fmt.Sprintln("FIXME: keys and values length mismatch", len(keys), len(values)))
-	}
-
-	if len(os.Args) < 4 || os.Args[1] == "" || os.Args[2] == "" || os.Args[3] == "" {
-		fmt.Println("Usage: GuatNetworkLogin <account> <password> <ISP>")
-		fmt.Println("ISP: 0:校园网, 1:电信, 2:联通, 3:移动, 4:广电")
-		os.Exit(1)
-	}
-	values[PARAM_ACC] = os.Args[1]
-	values[PARAM_PW] = os.Args[2]
-	values[PARAM_ISP] = os.Args[3]
-
 	// 预分配古法拼接
-	stringLen := len(LOGIN_URL) + len(keys)*2 // 1? 14& 15=
-	for i := range len(keys) {
-		stringLen += len(keys[i]) + len(values[i])
+	expectedLen := len(LOGIN_URL) + keysLen*2 // 1? 14& 15=
+	for i := range keysLen {
+		expectedLen += len(keys[i]) + len(values[i])
 	}
 
-	str := make([]byte, 0, stringLen)
-	str = append(str, LOGIN_URL...)
-	for i := range len(keys) {
+	loginUrl := make([]byte, 0, expectedLen)
+	loginUrl = append(loginUrl, LOGIN_URL...)
+	for i := range keysLen {
 		if i == 0 {
-			str = append(str, '?')
+			loginUrl = append(loginUrl, '?')
 		} else {
-			str = append(str, '&')
+			loginUrl = append(loginUrl, '&')
 		}
-		str = append(str, keys[i]...)
-		str = append(str, '=')
-		str = append(str, values[i]...)
+		loginUrl = append(loginUrl, keys[i]...)
+		loginUrl = append(loginUrl, '=')
+		loginUrl = append(loginUrl, values[i]...)
 	}
-	loginUrl = unsafe.String(unsafe.SliceData(str), len(str))
-	fmt.Println("loginUrl:")
-	fmt.Println(loginUrl)
+	fmt.Printf("loginUrl: %s\n", loginUrl)
 
-	if stringLen != len(loginUrl) {
-		panic(fmt.Sprintln("FIXME: loginUrl length mismatch", stringLen, len(loginUrl)))
+	if expectedLen != len(loginUrl) {
+		panic(fmt.Sprintf("[FIXME] str slice extended (realloced): %d => %d", expectedLen, len(loginUrl)))
 	}
 }
 
@@ -127,52 +142,65 @@ func doLogin() int {
 
 	triesBefore := totalTriesCount
 
-	// 在 5min 内无限尝试, 通过 request timeout 控制重试间隔
-	const DURATION = time.Minute * 5
+	// 在 [TOTLA_TIMEOUT] 内无限尝试,
+	// 通过 request timeout 控制重试间隔
 	t := time.Now().In(timeLoc)
-	timeEnd := t.Add(DURATION)
+	timeEnd := t.Add(TOTLA_TIMEOUT)
 
 	for t.Before(timeEnd) {
-		t = time.Now().In(timeLoc)
-		time.Sleep(time.Second / 10) // 保险给一个固定间隔
 		totalTriesCount++
-		fmt.Println(t.Format(TIME_FORMAT))
+		t = time.Now().In(timeLoc)
+		println(t.Format(TIME_FORMAT))
 
-		req, err := http.NewRequest("GET", loginUrl, nil)
+		req, err := http.NewRequest("GET", toString(loginUrl), nil)
 		if err != nil {
-			panic("failed to create request: " + err.Error())
+			panic(err)
 		}
 
 		resp, err := HttpClient.Do(req)
 		if err != nil {
-			fmt.Println("failed to get:", err)
+			fmt.Printf("failed to get: %v\n", err)
 			continue
 		}
 
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			fmt.Println("failed to read body:", err)
+			fmt.Printf("failed to read body: %v\n", err)
 			continue
 		}
 
-		fmt.Println(unsafe.String(unsafe.SliceData(body), len(body)))
+		os.Stdout.Write(body)
+		os.Stdout.Write([]byte{'\n'})
 		totalSuccessesCount++
 		return totalTriesCount - triesBefore
 	}
 
-	fmt.Println("failed to login after", totalTriesCount-triesBefore,
-		"tries since", t.Format(TIME_FORMAT),
-		", last try at", time.Now().In(timeLoc).Format(TIME_FORMAT))
+	fmt.Printf(
+		"failed to login after %d tries since %s, last try at %s\n",
+		totalTriesCount-triesBefore,
+		t.Format(TIME_FORMAT),
+		time.Now().In(timeLoc).Format(TIME_FORMAT),
+	)
 	return totalTriesCount - triesBefore
 }
 
-func main() {
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt)
+var sigChan = make(chan os.Signal, 1)
 
-	reader := bufio.NewReader(os.Stdin)
-	stdinCh := make(chan struct{})
+func init() {
+	signal.Notify(sigChan, os.Interrupt)
+}
+
+var (
+	stdinCh = make(chan struct{})
+	reader  = bufio.NewReader(os.Stdin)
+)
+
+var timer = time.NewTimer(next(DEFAULT_LOGIN_HOUR, DEFAULT_LOGIN_MIN, 0))
+
+func main() {
+	defer timer.Stop()
+
 	go func() {
 		for {
 			_, err := reader.ReadString('\n')
@@ -180,7 +208,7 @@ func main() {
 				if err == io.EOF {
 					return
 				}
-				fmt.Println("Stdin error:", err)
+				fmt.Printf("Stdin error: %v\n", err)
 				continue
 			}
 			select {
@@ -190,8 +218,6 @@ func main() {
 		}
 	}()
 
-	timer := time.NewTimer(next(DEFAULT_LOGIN_HOUR, DEFAULT_LOGIN_MIN, 0))
-	defer timer.Stop()
 LOOP:
 	for {
 		select {
@@ -206,10 +232,13 @@ LOOP:
 			doLogin()
 		case <-sigChan:
 			if totalTriesCount != 0 {
-				fmt.Println("total tries:", totalTriesCount,
-					"successes:", totalSuccessesCount,
-					"since", startTime.Format(TIME_FORMAT),
-					"(", time.Since(startTime).Round(time.Second), ")")
+				fmt.Printf(
+					"total tries: %d, successes: %d, since: %s (%s)\n",
+					totalTriesCount,
+					totalSuccessesCount,
+					startTime.Format(TIME_FORMAT),
+					time.Since(startTime).Round(time.Second),
+				)
 			}
 			break LOOP
 		}
