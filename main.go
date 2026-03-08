@@ -103,7 +103,7 @@ func init() {
 		expectedLen += len(keys[i]) + len(values[i])
 	}
 
-	loginUrl := make([]byte, 0, expectedLen)
+	loginUrl = make([]byte, 0, expectedLen)
 	loginUrl = append(loginUrl, LOGIN_URL...)
 	for i := range keysLen {
 		if i == 0 {
