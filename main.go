@@ -225,7 +225,10 @@ LOOP:
 			tries := doLogin()
 			tn := time.Now().In(timeLoc)
 			loginHour, loginMin = tn.Hour(), tn.Minute()
-			loginSec += (tries - 1) * 5
+			loginSec = (tries - 1) * 5
+			if loginSec >= 60 {
+				loginSec = 0
+			}
 			timer.Reset(next(loginHour, loginMin, loginSec))
 			// 如果在06:31:45登录成功, 则下一次会定时在06:31:45
 		case <-stdinCh:
