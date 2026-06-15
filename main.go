@@ -58,13 +58,25 @@ const (
 
 func init() {
 	if len(os.Args) < 4 || os.Args[1] == "" || os.Args[2] == "" || os.Args[3] == "" {
-		println("Usage: GuatNetworkLogin <account> <password> <ISP>")
+		println("Usage: GuatNetworkLogin <account> <password> <ISP> [hh:mm:ss]")
 		println("ISP: 0:校园网, 1:电信, 2:联通, 3:移动, 4:广电")
 		os.Exit(1)
 	}
 	values[INDEX_PARAM_ACC] = os.Args[1]
 	values[INDEX_PARAM_PW] = os.Args[2]
 	values[INDEX_PARAM_ISP] = os.Args[3]
+
+	if len(os.Args) >= 5 && os.Args[4] != "" {
+		var h, m, s int
+		n, err := fmt.Sscanf(os.Args[4], "%d:%d:%d", &h, &m, &s)
+		if err != nil || n != 3 || h < 0 || h > 23 || m < 0 || m > 59 || s < 0 || s > 59 {
+			println("Invalid time format, expected hh:mm:ss (e.g. 06:30:00)")
+			os.Exit(1)
+		}
+		loginHour = h
+		loginMin = m
+		loginSec = s
+	}
 }
 
 const LOGIN_URL = "http://10.1.2.3/drcom/login"
@@ -129,7 +141,7 @@ func next(hour, min, sec int) (till time.Duration) {
 		next = next.Add(24 * time.Hour)
 	}
 	till = next.Sub(now)
-	fmt.Print(till.Round(time.Second), " till next ", hour, ":", min, "\n")
+	fmt.Printf("%s till next %02d:%02d:%02d\n", till.Round(time.Second), hour, min, sec)
 	return till
 }
 
@@ -199,6 +211,7 @@ var (
 var timer = time.NewTimer(next(DEFAULT_LOGIN_HOUR, DEFAULT_LOGIN_MIN, 0))
 
 func main() {
+	timer.Reset(next(loginHour, loginMin, loginSec))
 	defer timer.Stop()
 
 	go func() {
