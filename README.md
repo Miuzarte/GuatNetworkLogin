@@ -2,11 +2,11 @@
 
 ## 👻✈️校园网自动登录
 
-Usage: GuatNetworkLogin \<account> \<password> \<ISP>
+Usage: GuatNetworkLogin \<account> \<password> \<ISP> [hh:mm:ss]
 
 ISP: 0:校园网, 1:电信, 2:联通, 3:移动, 4:广电
 
-每天 `6:30` 尝试登录校园网(持续~~五~~十分钟),
+每天默认 `6:30:00` 尝试登录校园网(持续十分钟),
 不检测具体返回的内容,
 GET成功即算作登录成功
 
